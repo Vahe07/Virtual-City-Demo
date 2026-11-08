@@ -227,6 +227,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--coral); out
 
 
 /* Virtual City interactive ownership layer */
+.vc-select {width:100%;padding:11px;border:1px solid #b9ced6;border-radius:9px;background:white;color:#13232c;font:inherit;margin:6px 0 8px}
+.vc-label{display:block;margin-top:12px;font-weight:600;font-size:13px}
+.vc-ghost{display:block;width:100%;padding:12px 14px;margin:10px 0;border:1px solid #1769aa;background:white;color:#1769aa;font-weight:700;border-radius:10px;cursor:pointer}
+.vc-stat span{max-width:64%;overflow-wrap:anywhere}
+.vc-stat b{text-align:right;overflow-wrap:anywhere}
+
 .vc-hud { position:fixed; z-index:6; top: max(68px, env(safe-area-inset-top) + 56px); left:12px; padding:8px 11px; border:0; border-radius:12px; background:rgba(255,255,255,.94); box-shadow:0 5px 19px #13232c33; color:#13232c; font-weight:700; font-size:12px; cursor:pointer; text-align:left; }
 .vc-hud span {display:block; font-size:10px; font-weight:500; color:#51636c}
 .vc-buy {display:block; width:100%; padding:12px 14px; background:#1769aa; color:white; border:0; border-radius:10px; font-weight:700; cursor:pointer; margin:10px 0}
@@ -2787,79 +2793,133 @@ function drawPortrait(cv, b) {
   drawBld(c, b, sc);
 }
 
-/* VC-005: self-contained LOCAL demo economy. This is not multiuser or actual currency. */
-const VC_KEY = 'virtual-city-demo-vc005-v1';
+/* VC-006: LOCAL demonstrator: shares, market listings and simulated income.
+   No backend, external users, real currency, contract or actual yield. */
+const VC_KEY = 'virtual-city-demo-vc005-v1'; // preserve existing owners from VC-005
 const VC_START_BALANCE = 250000;
-function vcFresh() { return { balance:VC_START_BALANCE, owned:{}, transactions:[] }; }
-function vcLoad() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(VC_KEY));
-    if (raw && typeof raw.balance === 'number' && raw.balance >= 0 && raw.owned && typeof raw.owned === 'object' && Array.isArray(raw.transactions)) return raw;
-  } catch(e) { /* storage unavailable or malformed */ }
-  return vcFresh();
+function vcFresh() { return {balance:VC_START_BALANCE, owned:{}, transactions:[], listings:{}, simMonths:0, simIncome:0}; }
+function vcLoad(){
+  let x;
+  try { x=JSON.parse(localStorage.getItem(VC_KEY)); } catch(e) {}
+  if(!x || !Number.isFinite(x.balance) || x.balance<0 || !x.owned || typeof x.owned!=='object' || Array.isArray(x.owned) || !Array.isArray(x.transactions)) return vcFresh();
+  x.listings=x.listings && typeof x.listings==='object' && !Array.isArray(x.listings)?x.listings:{};
+  x.simMonths=Number.isInteger(x.simMonths) && x.simMonths>=0?x.simMonths:0;
+  x.simIncome=Number.isFinite(x.simIncome) && x.simIncome>=0?x.simIncome:0;
+  for (const [id, o] of Object.entries(x.owned)) {
+    if (!o || !Number.isFinite(o.price)) {delete x.owned[id]; delete x.listings[id];continue;}
+    // VC-005 ownership was always 100%. Migration retains these purchases.
+    o.share=Number.isInteger(o.share) && o.share>0 && o.share<=100?o.share:100;
+  }
+  for (const id of Object.keys(x.listings)) if(!x.owned[id] || !Number.isFinite(x.listings[id].asking) || x.listings[id].asking<=0) delete x.listings[id];
+  return x;
 }
-let VC = vcLoad();
-function vcSave() { try { localStorage.setItem(VC_KEY, JSON.stringify(VC)); } catch(e) { /* in private browser progress may not persist */ } }
-const vcMoney = n => fmt(n) + ' куп.';
-const vcId = (b, apt) => apt == null ? 'B-'+String(b.id).padStart(4,'0') : 'A-'+String(b.id).padStart(4,'0')+'-'+String(apt).padStart(3,'0');
-function vcPrice(b, apt) {
-  if (apt != null) { const a = b.apts[apt]; return Math.round((1000 + a.area * 62 + a.rooms * 320) / 100) * 100; }
-  if (b.kind === 'house') return Math.round((7000 + b.area * 115) / 100) * 100;
-  const special = ['terminal','mall','grandhotel','hotel','office','stadium'];
-  if (special.includes(b.kind)) return 72000 + b.id % 11 * 2700;
-  if (b.kind === 'cafe' || b.kind === 'rest') return 15000 + b.id % 17 * 850;
-  if (b.kind === 'shop') return 12000 + b.id % 13 * 800;
-  return 18000 + b.id % 19 * 700;
+let VC=vcLoad();
+function vcSave(){try{localStorage.setItem(VC_KEY,JSON.stringify(VC));}catch(e){}}
+const vcMoney=n=>fmt(n)+' куп.';
+const vcId=(b,apt)=>apt==null?'B-'+String(b.id).padStart(4,'0'):'A-'+String(b.id).padStart(4,'0')+'-'+String(apt).padStart(3,'0');
+function vcPrice(b,apt){
+  if(apt!=null){const a=b.apts[apt];return Math.round((1000+a.area*62+a.rooms*320)/100)*100;}
+  if(b.kind==='house')return Math.round((7000+b.area*115)/100)*100;
+  if(['terminal','mall','grandhotel','hotel','office','stadium'].includes(b.kind))return 72000+b.id%11*2700;
+  if(b.kind==='cafe'||b.kind==='rest')return 15000+b.id%17*850;
+  if(b.kind==='shop')return 12000+b.id%13*800;
+  return 18000+b.id%19*700;
 }
-function vcEligible(b, apt) {
-  if (apt != null) return !!(b && b.apts && b.apts[apt]);
-  return !!(b && !['apt','aptB'].includes(b.kind) && ['house','cafe','rest','shop','office','mall','grandhotel','hotel','terminal','stadium','yacht','energy','gas'].includes(b.kind));
+function vcEligible(b,apt){
+  if(apt!=null)return !!(b&&b.apts&&b.apts[apt]);
+  return !!(b&&!['apt','aptB'].includes(b.kind)&&['house','cafe','rest','shop','office','mall','grandhotel','hotel','terminal','stadium','yacht','energy','gas'].includes(b.kind));
 }
-function vcOwn(b, apt) { return !!VC.owned[vcId(b, apt)]; }
-function vcUpdateWallet() {
-  const n=document.getElementById('vcBalance');
-  if (n) n.textContent=fmt(VC.balance);
-}
-function vcAssetName(b,apt) {return apt == null ? b.name : 'Квартира № '+b.apts[apt].n+' · '+b.name;}
-function vcEstate(b,apt) {
-  if (!vcEligible(b,apt)) return '';
-  const id=vcId(b,apt), owned=vcOwn(b,apt), price=vcPrice(b,apt), poor=VC.balance<price;
+const vcMinShare=b=>['terminal','stadium','energy'].includes(b.kind)?1:['mall','grandhotel','office','hotel'].includes(b.kind)?2:['cafe','rest','shop','gas','yacht'].includes(b.kind)?10:100;
+function vcAllowedShares(b,apt){const min=apt==null?vcMinShare(b):100;return min===100?[100]:[min,2,5,10,20,25,50,75,100].filter((n,i,a)=>n>=min&&n<=100&&a.indexOf(n)===i).sort((a,b)=>a-b);}
+function vcOwnedShare(id){return VC.owned[id]?VC.owned[id].share:0;}
+function vcOwn(b,apt){return vcOwnedShare(vcId(b,apt))>0;}
+function vcAssetName(b,apt){return apt==null?b.name:'Квартира № '+b.apts[apt].n+' · '+b.name;}
+function vcUpdateWallet(){const n=document.getElementById('vcBalance');if(n)n.textContent=fmt(VC.balance);}
+function vcResolve(id){const m=/^([AB])-(\d{4})(?:-(\d{3}))?$/.exec(id);if(!m)return null;const b=BLD[+m[2]];if(!b)return null;const apt=m[1]==='A'&&m[3]!=null?+m[3]:null;return vcEligible(b,apt)&&vcId(b,apt)===id?{b,apt}:null;}
+function vcSelectedShare(id){const el=UI.body.querySelector('[data-vc-share="'+id+'"]');return el?Number(el.value):100;}
+function vcShareOptions(b,apt,remaining){return vcAllowedShares(b,apt).filter(s=>s<=remaining);}
+function vcEstate(b,apt){
+  if(!vcEligible(b,apt))return '';
+  const id=vcId(b,apt),full=vcPrice(b,apt),own=vcOwnedShare(id),remain=100-own,listing=VC.listings[id];
+  const options=vcShareOptions(b,apt,remain);
+  const buyable=options.length>0;
+  const select=buyable?`<label class="vc-label" for="share-${id}">Приобрести долю</label><select class="vc-select" id="share-${id}" data-vc-share="${id}">${options.map(s=>`<option value="${s}">${s}% — ${vcMoney(Math.round(full*s/100))}</option>`).join('')}</select>`:'';
+  let actions='';
+  if(buyable) actions=select+`<button class="vc-buy" data-vc-buy="${id}">Купить выбранную долю (демо)</button>`;
+  else if(own===100) actions='<p class="vc-notice">Все 100% объекта находятся в вашей собственности.</p>';
+  else actions='<p class="vc-notice">Оставшаяся доля меньше минимально допустимой.</p>';
+  if(own>0)actions+=`<div class="vc-stat"><span>Ваша доля</span><b>${own}%</b></div><div class="vc-stat"><span>Условная месячная выплата при 1% от полной цены</span><b>${vcMoney(Math.round(full*own/100*0.01))}</b></div>`+
+    (listing?`<p class="vc-notice">Объявление о продаже ${listing.share}% активно: ${vcMoney(listing.asking)}</p><button class="vc-ghost" data-vc-cancel="${id}">Снять объявление</button>`:`<button class="vc-ghost" data-vc-list="${id}">Выставить мою долю на игровой рынок</button>`);
   return `<div class="vc-estate"><h3>🏠 Недвижимость · Virtual City</h3>
-    <div class="vc-stat"><span>Уникальный ID</span><b>${esc(id)}</b></div>
-    <div class="vc-stat"><span>Цена от города</span><b>${vcMoney(price)}</b></div>
-    <div class="vc-stat"><span>Владелец</span><b>${owned?'Вы':'Город'}</b></div>
-    <div class="vc-stat"><span>Статус</span><b>${owned?'В вашей собственности':'Доступен для покупки'}</b></div>
-    <button class="vc-buy" data-vc-buy="${esc(id)}" ${owned||poor?'disabled':''}>${owned?'✓ Вы владелец':poor?'Недостаточно купонов':'Купить за '+vcMoney(price)}</button>
-    <p class="vc-notice">Демонстрационная покупка. Сохранение только в браузере этого устройства. Реальных денег и гарантированного дохода нет.</p></div>`;
+  <div class="vc-stat"><span>Уникальный ID</span><b>${esc(id)}</b></div>
+  <div class="vc-stat"><span>Цена объекта целиком</span><b>${vcMoney(full)}</b></div>
+  <div class="vc-stat"><span>Владелец</span><b>${own===100?'Вы':own>0?'Вы ('+own+'%) и Город ('+(100-own)+'%)':'Город'}</b></div>
+  <div class="vc-stat"><span>Доля города, доступная для покупки</span><b>${remain}%</b></div>
+  ${actions}<p class="vc-notice">Только игровая демонстрация. Доли и объявления существуют на этом устройстве; другие игроки их пока не видят. Никакого реального дохода, денег или обязательств.</p></div>`;
 }
-function vcBuy(id) {
-  let b,apt=null;
-  const m=/^([AB])-(\d{4})(?:-(\d{3}))?$/.exec(id);
-  if (!m) return;
-  b=BLD[+m[2]];
-  if (!b) return;
-  if (m[1]==='A') { if(m[3] == null)return; apt=+m[3]; }
-  if (!vcEligible(b,apt) || vcId(b,apt)!==id || vcOwn(b,apt)) return;
-  const price=vcPrice(b,apt);
-  if (VC.balance<price) return;
-  VC.balance-=price;
-  VC.owned[id]={id,building:b.id,apt,price,title:vcAssetName(b,apt),date:new Date().toISOString()};
-  VC.transactions.unshift({id,amount:-price,type:'Покупка',date:new Date().toISOString()});
-  VC.transactions=VC.transactions.slice(0,100);
-  vcSave(); vcUpdateWallet(); renderView();
+function vcRecord(id,type,amount,detail){VC.transactions.unshift({id,type,amount,detail:detail||'',date:new Date().toISOString()});VC.transactions=VC.transactions.slice(0,120);}
+function vcAfterChange(){vcSave();vcUpdateWallet();renderView();}
+function vcBuy(id){
+  const resolved=vcResolve(id);if(!resolved)return;
+  const {b,apt}=resolved,share=vcSelectedShare(id),old=vcOwnedShare(id),full=vcPrice(b,apt);
+  if(!vcShareOptions(b,apt,100-old).includes(share))return;
+  const amount=Math.round(full*share/100);
+  if(VC.balance<amount){alert('Недостаточно тестовых купонов.');return;}
+  VC.balance-=amount;
+  if(VC.owned[id]){VC.owned[id].share+=share;VC.owned[id].price+=amount;}
+  else VC.owned[id]={id,building:b.id,apt,price:amount,share,title:vcAssetName(b,apt),date:new Date().toISOString()};
+  vcRecord(id,'Покупка '+share+'%',-amount);
+  vcAfterChange();
 }
-function vcPlayerView() {
-  const owned=Object.values(VC.owned), spent=owned.reduce((a,x)=>a+x.price,0);
-  const rows=owned.length?owned.map(x=>`<button class="vc-list-btn" data-go="${x.apt==null?'b:'+x.building:'apt:'+x.building+':'+x.apt}"><b>${esc(x.title)}</b><br><span class="vc-tag">${esc(x.id)} · ${vcMoney(x.price)} · перейти к объекту ›</span></button>`).join(''):'<p class="desc">У вас пока нет объектов. Выберите здание на карте и откройте его карточку.</p>';
-  const ledger=VC.transactions.slice(0,8).map(t=>`<div class="vc-stat"><span>${esc(t.type)} · ${esc(t.id)}</span><b>${vcMoney(t.amount)}</b></div>`).join('');
+function vcListingStart(id){
+  const o=VC.owned[id];if(!o || VC.listings[id])return;
+  const price=prompt('Цена продажи вашей доли '+o.share+'% в тестовых купонах (целое число):',String(o.price));
+  if(price===null)return;
+  if(!/^\d+$/.test(price.trim()) || +price<1 || +price>1000000000){alert('Введите целую цену от 1 до 1 000 000 000.');return;}
+  VC.listings[id]={id,share:o.share,asking:+price,created:new Date().toISOString()};
+  vcRecord(id,'Выставлено на рынок',0,o.share+'% · '+vcMoney(+price));vcAfterChange();
+}
+function vcListingCancel(id){if(!VC.listings[id])return;delete VC.listings[id];vcRecord(id,'Объявление снято',0);vcAfterChange();}
+function vcSellSimulated(id){
+  const listing=VC.listings[id],o=VC.owned[id];if(!listing||!o)return;
+  if(!confirm('Имитировать продажу '+listing.share+'% за '+vcMoney(listing.asking)+'? Это НЕ продажа другому человеку.'))return;
+  const fee=Math.round(listing.asking*.02),income=listing.asking-fee;
+  VC.balance+=income;
+  vcRecord(id,'Тестовая продажа '+listing.share+'%',income,'Комиссия 2%: '+vcMoney(fee));
+  delete VC.listings[id];delete VC.owned[id];
+  vcAfterChange();
+}
+function vcSimIncome(){
+  const positions=Object.values(VC.owned);
+  if(!positions.length){alert('Сначала приобретите объект за тестовые купоны.');return;}
+  const amount=positions.reduce((sum,o)=>{
+    const r=vcResolve(o.id);return sum+(r?Math.round(vcPrice(r.b,r.apt)*o.share/100*.01):0);
+  },0);
+  if(!Number.isFinite(amount)||amount<=0)return;
+  VC.balance+=amount;VC.simIncome+=amount;VC.simMonths++;
+  vcRecord('SIM','Учебный месяц №'+VC.simMonths,amount,'Модель: 1% от условной стоимости долей');
+  vcAfterChange();
+}
+function vcMarketView(){
+  const entries=Object.entries(VC.listings);
+  const rows=entries.length?entries.map(([id,l])=>{
+    const o=VC.owned[id];return `<div class="vc-estate"><b>${esc(o?.title||id)}</b><div class="vc-stat"><span>${esc(id)} · ваша доля</span><b>${l.share}%</b></div><div class="vc-stat"><span>Цена объявления</span><b>${vcMoney(l.asking)}</b></div><button class="vc-ghost" data-vc-cancel="${id}">Снять объявление</button><button class="vc-buy" data-vc-sim-sell="${id}">Имитировать продажу (тест)</button></div>`;
+  }).join(''):'<p class="desc">Пока объявлений нет. Откройте своё здание через профиль и нажмите «Выставить на игровой рынок».</p>';
+  return `<div class="hero-t solo"><p class="kind">Локальный рынок · VC-006</p><h2 class="title">Объявления о продаже</h2></div>${rows}<p class="vc-notice">В этой версии рынок существует только у вас в браузере. Кнопка «Имитировать продажу» создаёт учебную сделку с комиссией 2%, без реального покупателя.</p>`;
+}
+function vcPlayerView(){
+  const owned=Object.values(VC.owned),paid=owned.reduce((sum,o)=>sum+o.price,0),value=owned.reduce((sum,o)=>{const r=vcResolve(o.id);return sum+(r?Math.round(vcPrice(r.b,r.apt)*o.share/100):o.price);},0);
+  const rows=owned.length?owned.map(o=>`<button class="vc-list-btn" data-go="${o.apt==null?'b:'+o.building:'apt:'+o.building+':'+o.apt}"><b>${esc(o.title)}</b><br><span class="vc-tag">${esc(o.id)} · доля ${o.share}% · ${vcMoney(o.price)}${VC.listings[o.id]?' · выставлено на продажу':''} ›</span></button>`).join(''):'<p class="desc">У вас пока нет объектов. Нажмите на здание на карте и приобретите тестовую долю.</p>';
+  const ledger=VC.transactions.slice(0,15).map(t=>`<div class="vc-stat"><span>${esc(t.type)} · ${esc(t.id)}${t.detail?' · '+esc(t.detail):''}</span><b>${vcMoney(t.amount)}</b></div>`).join('');
   return `<div class="hero-t solo"><p class="kind">Виртуальный гражданин · тестовый аккаунт</p><h2 class="title">Мой Virtual City</h2></div>
-  <div class="tiles">${tile('Баланс',fmt(VC.balance),'тестовых купонов')}${tile('Моя недвижимость',String(owned.length),'объектов')}${tile('Покупная стоимость',fmt(spent),'тестовых купонов')}${tile('Режим','DEMO','только это устройство')}</div>
-  <section class="sec"><h3>Мои объекты</h3>${rows}</section>
-  <section class="sec"><h3>История покупок</h3>${ledger||'<p class="note">История пуста.</p>'}</section>
-  <p class="vc-notice">Никакого пополнения, вывода денег, обещаний доходности и общих аккаунтов. Данные хранятся локально в этом браузере.</p>
-  <button class="more" data-vc-reset="1">Сбросить демонстрационный прогресс</button>`;
+  <div class="tiles">${tile('Баланс',fmt(VC.balance),'тестовых купонов')}${tile('Мои объекты',String(owned.length),'позиций')}${tile('Условная стоимость долей',fmt(value),'не рыночная оценка')}${tile('Тестовые начисления',fmt(VC.simIncome),VC.simMonths+' игровых месяцев')}</div>
+  <button class="vc-buy" data-go="view:market">🏷 Мои объявления о продаже (${Object.keys(VC.listings).length})</button>
+  <section class="sec"><h3>Учебная модель начислений</h3><p class="desc">Расчётный игровой пример: 1% от первоначальной стоимости ваших долей за один условный месяц. Это не доходность реального актива и не обещание выплат.</p><button class="vc-ghost" data-vc-income="1">Смоделировать следующий месяц</button></section>
+  <section class="sec"><h3>Моя собственность</h3>${rows}</section>
+  <section class="sec"><h3>История операций</h3>${ledger||'<p class="note">Пока операций нет.</p>'}</section>
+  <p class="vc-notice">Демо на одном устройстве: нет банков, вывода средств, общего сервера или других участников. Старые покупки из VC-005 сохранены.</p>
+  <button class="more" data-vc-reset="1">Сбросить локальный демо-прогресс</button>`;
 }
-
 /* ui.js — HUD, info sheet, gestures, picking, boot */
 const $ = s => document.querySelector(s);
 const cap = s => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
@@ -3082,6 +3142,14 @@ function renderView() {
   else SEL = null;
 }
 function onSheetClick(e) {
+  const listing=e.target.closest('[data-vc-list]');
+  if(listing){e.preventDefault();vcListingStart(listing.dataset.vcList);return;}
+  const cancel=e.target.closest('[data-vc-cancel]');
+  if(cancel){e.preventDefault();vcListingCancel(cancel.dataset.vcCancel);return;}
+  const simulated=e.target.closest('[data-vc-sim-sell]');
+  if(simulated){e.preventDefault();vcSellSimulated(simulated.dataset.vcSimSell);return;}
+  const income=e.target.closest('[data-vc-income]');
+  if(income){e.preventDefault();vcSimIncome();return;}
   const buy=e.target.closest('[data-vc-buy]');
   if(buy){e.preventDefault();vcBuy(buy.dataset.vcBuy);return;}
   const reset=e.target.closest('[data-vc-reset]');
@@ -3364,6 +3432,7 @@ function whereNow(p) {
 /* views */
 const VIEWS = {};
 VIEWS.player = () => vcPlayerView();
+VIEWS.market = () => vcMarketView();
 VIEWS.b = v => {
   const b = BLD[v.id];
   let h = heroB(b);
