@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtual City</title>
+<style>
+body{margin:0;background:#101b2b;color:white;font-family:Arial,sans-serif}
+header{padding:20px;background:#17263a;text-align:center}
+h1{margin:0;color:#6ee7b7}
+main{padding:18px;max-width:650px;margin:auto}
+.city{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.building{background:#263b53;border:1px solid #46617d;border-radius:14px;padding:22px 8px;text-align:center;cursor:pointer;font-size:18px}
+.building span{display:block;font-size:42px;margin-bottom:10px}
+.panel{margin-top:20px;padding:20px;background:#1d3045;border-radius:14px}
+button{padding:12px 18px;border:0;border-radius:9px;background:#6ee7b7;color:#102019;font-weight:bold}
+small{color:#aabbd0}
+</style>
+</head>
+<body>
+<header><h1>🌆 VIRTUAL CITY</h1><small>Твой виртуальный город</small></header>
+<main>
+<h2>Центральный район</h2>
+<div class="city" id="city"></div>
+<div class="panel" id="details">Выбери здание на карте.</div>
+</main>
+<script>
+const buildings=[
+{name:"Апартаменты A1",icon:"🏢",price:1200},
+{name:"Вилла V1",icon:"🏡",price:5000},
+{name:"Ресторан R1",icon:"🍽️",price:3500},
+{name:"Отель H1",icon:"🏨",price:9000},
+{name:"Магазин S1",icon:"🛍️",price:2400},
+{name:"Офис O1",icon:"🏙️",price:4200}
+];
+const city=document.getElementById("city");
+const details=document.getElementById("details");
+buildings.forEach((b,i)=>{
+const tile=document.createElement("div");
+tile.className="building";
+tile.innerHTML="<span>"+b.icon+"</span>"+b.name;
+tile.onclick=()=>show(i);
+city.appendChild(tile);
+});
+function show(i){
+const b=buildings[i];
+details.innerHTML="<h2>"+b.icon+" "+b.name+"</h2><p>Цена: "+b.price+" тестовых купонов</p><p>Владелец: город</p><button id='buy'>Тестовая покупка</button><p><small>Демо: реальные деньги не используются.</small></p>";
+document.getElementById("buy").onclick=()=>alert("Покупка пока демонстрационная.");
+}
+</script>
+</body>
+</html>
