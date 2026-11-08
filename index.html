@@ -240,6 +240,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--coral); out
 @media (max-width: 380px) { .dock button { min-width: 62px; } .speed button { min-width: 32px; padding: 6px 7px; } .citysign .cs-sub { display: none; } }
 
 
+/* VC-008 visual property cards */
+.vc-photo{margin:10px 0 16px;position:relative;background:linear-gradient(135deg,#c9e4ea,#e8e2d3);border-radius:14px;overflow:hidden;min-height:160px}
+.vc-photo img{display:block;width:100%;height:205px;object-fit:cover;object-position:center}
+.vc-photo figcaption{padding:8px 12px;font-size:11.5px;color:#51636c;background:#f0f5f6}
+.vc-income-panel{padding:7px 12px;margin:10px 0;background:#e8f4f2;border:1px solid #b8dcd3;border-radius:12px}
+.vc-income-panel .vc-stat:last-of-type b{color:#087b53}
 /* Virtual City interactive ownership layer */
 .vc-select {width:100%;padding:11px;border:1px solid #b9ced6;border-radius:9px;background:white;color:#13232c;font:inherit;margin:6px 0 8px}
 .vc-label{display:block;margin-top:12px;font-weight:600;font-size:13px}
@@ -2854,10 +2860,43 @@ function vcUpdateWallet(){const n=document.getElementById('vcBalance');if(n)n.te
 function vcResolve(id){const m=/^([AB])-(\d{4})(?:-(\d{3}))?$/.exec(id);if(!m)return null;const b=BLD[+m[2]];if(!b)return null;const apt=m[1]==='A'&&m[3]!=null?+m[3]:null;return vcEligible(b,apt)&&vcId(b,apt)===id?{b,apt}:null;}
 function vcSelectedShare(id){const el=UI.body.querySelector('[data-vc-share="'+id+'"]');return el?Number(el.value):100;}
 function vcShareOptions(b,apt,remaining){return vcAllowedShares(b,apt).filter(s=>s<=remaining);}
+
+/* VC-008: illustrative exterior and interior photos */
+function vcPhotoUrl(b,apt){
+ const k=apt!=null?'interior':b.kind;
+ const ids={
+ interior:'photo-1600607687939-ce8a6c25118c',
+ house:'photo-1600585154340-be6161a56a0c',
+ apt:'photo-1545324418-cc1a3fa10c00',
+ aptB:'photo-1545324418-cc1a3fa10c00',
+ cafe:'photo-1552566626-52f8b828add9',
+ rest:'photo-1517248135467-4c7edcad34c4',
+ shop:'photo-1555529669-e69e7aa0ba9a',
+ office:'photo-1486406146926-c627a92ad1ab',
+ mall:'photo-1555529669-e69e7aa0ba9a',
+ grandhotel:'photo-1566073771259-6a8506099945',
+ hotel:'photo-1566073771259-6a8506099945',
+ terminal:'photo-1436491865332-7a61a109cc05',
+ stadium:'photo-1459865264687-5951e1d6c67d',
+ yacht:'photo-1544551763-46a013bb70d5',
+ energy:'photo-1509391366360-2e959784a276',
+ gas:'photo-1593113598332-cd288d649433'
+ };
+ return 'https://images.unsplash.com/'+(ids[k]||ids.office)+'?auto=format&fit=crop&w=1000&q=78';
+}
+function vcPhoto(b,apt){
+ if(!vcEligible(b,apt))return '';
+ const alt=apt!=null?'Пример интерьера квартиры':'Пример недвижимости категории '+String(b.type||b.kind);
+ return '<figure class="vc-photo"><img loading="lazy" decoding="async" src="'+vcPhotoUrl(b,apt)+'" alt="'+esc(alt)+'" onerror="this.hidden=true"><figcaption>Пример фотографии · внешний вид виртуального объекта может отличаться</figcaption></figure>';
+}
+
 function vcEstate(b,apt){
   if(!vcEligible(b,apt))return '';
   const id=vcId(b,apt),full=vcPrice(b,apt),own=vcOwnedShare(id),remain=100-own,listing=VC.listings[id];
   const options=vcShareOptions(b,apt,remain);
+  const incomeFull=Math.round(full*0.01);
+  const initiallySelected=options.length?options[0]:0;
+  const incomeSelected=Math.round(full*initiallySelected/100*0.01);
   const buyable=options.length>0;
   const select=buyable?`<label class="vc-label" for="share-${id}">Приобрести долю</label><select class="vc-select" id="share-${id}" data-vc-share="${id}">${options.map(s=>`<option value="${s}">${s}% — ${vcMoney(Math.round(full*s/100))}</option>`).join('')}</select>`:'';
   let actions='';
@@ -2866,9 +2905,14 @@ function vcEstate(b,apt){
   else actions='<p class="vc-notice">Оставшаяся доля меньше минимально допустимой.</p>';
   if(own>0)actions+=`<div class="vc-stat"><span>Ваша доля</span><b>${own}%</b></div><div class="vc-stat"><span>Условная месячная выплата при 1% от полной цены</span><b>${vcMoney(Math.round(full*own/100*0.01))}</b></div>`+
     (listing?`<p class="vc-notice">Объявление о продаже ${listing.share}% активно: ${vcMoney(listing.asking)}</p><button class="vc-ghost" data-vc-cancel="${id}">Снять объявление</button>`:`<button class="vc-ghost" data-vc-list="${id}">Выставить мою долю на игровой рынок</button>`);
-  return `<div class="vc-estate"><h3>🏠 Недвижимость · Virtual City</h3>
+  return `<div class="vc-estate"><h3>🏠 Недвижимость · Virtual City</h3>${vcPhoto(b,apt)}
   <div class="vc-stat"><span>Уникальный ID</span><b>${esc(id)}</b></div>
   <div class="vc-stat"><span>Цена объекта целиком</span><b>${vcMoney(full)}</b></div>
+  <div class="vc-income-panel">
+    <div class="vc-stat"><span>Тестовый доход за месяц · весь объект</span><b>${vcMoney(incomeFull)}</b></div>
+    <div class="vc-stat"><span>${buyable?'За выбранную долю':'За вашу текущую долю'} в месяц</span><b ${buyable?'data-vc-monthly="'+esc(id)+'"':''}>${vcMoney(buyable?incomeSelected:Math.round(full*own/100*0.01))}</b></div>
+    <p class="vc-notice">Игровой расчёт: 1% стоимости за условный месяц. Не реальная доходность и не обязательство выплаты.</p>
+  </div>
   <div class="vc-stat"><span>Владелец</span><b>${own===100?'Вы':own>0?'Вы ('+own+'%) и Город ('+(100-own)+'%)':'Город'}</b></div>
   <div class="vc-stat"><span>Доля города, доступная для покупки</span><b>${remain}%</b></div>
   ${actions}<p class="vc-notice">Только игровая демонстрация. Доли и объявления существуют на этом устройстве; другие игроки их пока не видят. Никакого реального дохода, денег или обязательств.</p></div>`;
@@ -3262,6 +3306,7 @@ function onSheetClick(e) {
   else if (k === 'all') { v.all = true; const sc = UI.body.scrollTop; renderView(); UI.body.scrollTop = sc; }
 }
 function onSheetInput(e) {
+  if(e.target.matches('[data-vc-share]')){const id=e.target.dataset.vcShare,r=vcResolve(id),out=UI.body.querySelector('[data-vc-monthly="'+id+'"]');if(r&&out)out.textContent=vcMoney(Math.round(vcPrice(r.b,r.apt)*Number(e.target.value)/100*0.01));return;}
   if(e.target.id==='vcMarketQ'){VC_MARKET_QUERY=e.target.value;const el=$('#vcMarketResults');if(el)el.innerHTML=vcMarketRows();return;}
   if (e.target.id !== 'dirQ') return;
   const v = UI.stack[UI.stack.length - 1];
@@ -3321,9 +3366,7 @@ function occHtml(p) {
   if (p.a >= 3 && p.a <= 6 && KINDER_ID >= 0) return `${esc(cap(gf('воспитанник|воспитанница', p.g)))} <button class="lnk" data-go="b:${KINDER_ID}">детского сада «Солнышко»</button>`;
   return esc(cap(occText(p)));
 }
-function personRow(p, role) {
-  return `<button class="prow" data-go="p:${p.id}"><span class="av" aria-hidden="true">${avatar(p)}</span><span class="pn"><b>${esc(p.f + ' ' + p.l)}</b><small>${esc(ageStr(p.a))} · ${esc(role || occText(p))}</small></span><span class="chev" aria-hidden="true">›</span></button>`;
-}
+function personRow(){return '';}
 function staffSec(b, v, title) {
   if (!b.jobs || !b.jobs.length) return '';
   const filled = b.jobs.filter(j => j.p != null), vac = b.jobs.filter(j => j.p == null), lim = v.all ? 9999 : 8;
@@ -3556,48 +3599,37 @@ function aptGrid(b, sel) {
   return h + '</div>';
 }
 function aptDetail(b, i) {
-  const a = b.apts[i];
-  let h = `<div class="aptd-h"><b>Квартира ${a.n}</b><span>${cap(roomsStr(a.rooms))}, ${fmt1(a.area)} м², ${a.fl} этаж</span></div>`;
-  if (a.vac) h += `<p class="vac ${a.vac}">${a.vac === 'sale' ? 'Продаётся' : 'Сдаётся'} за <b>${fmt(a.price)} лз${a.vac === 'rent' ? ' в месяц' : ''}</b></p>`;
-  else { h += a.ppl.map(id => personRow(PPL[id])).join(''); if (a.pet) h += `<p class="pet">Питомец: ${esc(a.pet)}</p>`; }
-  return h + vcEstate(b,i);
+  const a=b.apts[i];
+  const detail='<div class="aptd-h"><b>Квартира '+esc(a.n)+'</b><span>'+cap(roomsStr(a.rooms))+', '+fmt1(a.area)+' м², '+a.fl+' этаж</span></div>';
+  return detail+vcEstate(b,i);
 }
 function viewApt(b, v) {
-  if (v.apt == null) v.apt = defaultApt(b);
-  const occ = b.apts.filter(a => !a.vac), people = occ.reduce((s, a) => s + a.ppl.length, 0);
-  return facts([['Квартир', String(b.apts.length)], ['Жильцов', String(people)], ['Свободно', String(b.apts.length - occ.length)], ['Год постройки', String(b.year)]])
-    + `<section class="sec"><h3>Квартиры по этажам</h3><div class="legend"><span><i class="lg occ"></i>живут</span><span><i class="lg sale"></i>продаётся</span><span><i class="lg rent"></i>сдаётся</span></div><div id="aptWrap">${aptGrid(b, v.apt)}</div></section>`
-    + `<section class="sec aptd" id="aptDetail">${aptDetail(b, v.apt)}</section>`;
+  if(v.apt==null)v.apt=defaultApt(b);
+  return facts([['Квартир',String(b.apts.length)],['Этажей',String(b.floors)],['Год постройки',String(b.year)]])
+    +'<section class="sec"><h3>Квартиры по этажам</h3><div class="legend"><span><i class="lg occ"></i>не выставлена</span><span><i class="lg sale"></i>продаётся</span><span><i class="lg rent"></i>сдаётся</span></div><div id="aptWrap">'+aptGrid(b,v.apt)+'</div></section>'
+    +'<section class="sec aptd" id="aptDetail">'+aptDetail(b,v.apt)+'</section>';
 }
 function viewHouse(b) {
-  return facts([['Комнат', String(b.rooms)], ['Площадь', b.area + ' м²'], ['Этажей', String(b.floors)], ['Год постройки', String(b.year)]])
-    + `<section class="sec"><h3>Жильцы · ${b.ppl.length}</h3>${b.ppl.map(id => personRow(PPL[id])).join('')}</section>`
-    + `<p class="desc">Во дворе: ${esc(b.garden)}.${b.pet ? ' Питомец: ' + esc(b.pet) + '.' : ''}</p>`;
+ return facts([['Комнат',String(b.rooms)],['Площадь',b.area+' м²'],['Этажей',String(b.floors)],['Год постройки',String(b.year)]]);
 }
 function viewFood(b, v) {
   return `<div class="chips">${chipOpen(b)}<span class="chip">★ ${fmt1(b.rating)}</span><span class="chip">Средний чек ${fmt(b.check)} лз</span></div>`
     + facts([['Сейчас в зале', `<span data-live="vis:${b.id}">${visitorsHtml(b)}</span>`], ['Часы работы', hoursStr(b)]])
     + (b.note ? `<p class="desc">${esc(b.note)}</p>` : '')
     + `<section class="sec"><h3>Меню</h3><ul class="menu">${b.menu.map(([n, p]) => `<li><span>${esc(n)}</span><span class="price">${fmt(p)} лз</span></li>`).join('')}</ul></section>`
-    + staffSec(b, v);
+    ;
 }
 function viewShop(b, v) {
   return `<div class="chips">${chipOpen(b)}</div>`
     + facts([['Часы работы', hoursStr(b)], ['Покупателей сейчас', live('shopv:' + b.id)]])
     + `<section class="sec"><h3>${b.cat === 'health' ? 'В наличии' : 'Цены'}</h3><ul class="menu">${b.goods.map(([n, p]) => `<li><span>${esc(n)}</span><span class="price">${fmt(p)} лз</span></li>`).join('')}</ul></section>`
-    + staffSec(b, v);
+    ;
 }
-function viewOffice(b, v) {
-  const emp = b.jobs.filter(j => j.p != null).length;
-  let h = `<div class="chips">${chipOpen(b)}</div>` + facts([['Этажей', String(b.floors)], ['Компаний', String(b.comp.length)], ['Сотрудников', String(emp)], ['Построен', b.year + ' год']]);
-  h += '<section class="sec"><h3>Кто здесь работает</h3><p class="note">1 этаж: лобби и кофе-точка.</p>';
-  for (const c of b.comp) {
-    const ppl = c.jobs.filter(j => j.p != null);
-    h += `<div class="co"><div class="co-h"><b>${esc(c.name)}</b><span>${c.from === c.to ? c.from + ' этаж' : c.from + '–' + c.to + ' этажи'}</span></div><p class="co-t">${esc(cap(c.type))}, ${ppl.length} ${plural(ppl.length, ['сотрудник', 'сотрудника', 'сотрудников'])}</p>`;
-    h += ppl.slice(0, v.all ? 9999 : 3).map(j => personRow(PPL[j.p], lc1(gf(j.t, PPL[j.p].g)))).join('') + '</div>';
-  }
-  if (!v.all) h += '<button class="more" data-go="all">Показать всех сотрудников</button>';
-  return h + '</section>';
+function viewOffice(b,v){
+  let h='<div class="chips">'+chipOpen(b)+'</div>'+facts([['Этажей',String(b.floors)],['Компаний',String(b.comp.length)],['Год постройки',String(b.year)]]);
+  h+='<section class="sec"><h3>Компании в здании</h3>';
+  for(const c of b.comp)h+='<div class="co"><div class="co-h"><b>'+esc(c.name)+'</b><span>'+c.from+'–'+c.to+' этажи</span></div><p class="co-t">'+esc(cap(c.type))+'</p></div>';
+  return h+'</section>';
 }
 const PLACE_FACTS = {
   school: b => [['Учеников', fmt(STATS.pupils)], ['Классов', '33'], ['Учителей', countJobs(b, /^Учит/)], ['Сейчас', live('school')]],
@@ -3647,20 +3679,12 @@ function viewPlace(b, v) {
   if (b.desc) h += `<p class="desc">${esc(b.desc)}</p>`;
   if (PLACE_FACTS[b.kind]) h += facts(PLACE_FACTS[b.kind](b));
   if (PLACE_EXTRA[b.kind]) h += PLACE_EXTRA[b.kind](b);
-  return h + staffSec(b, v);
+  return h;
 }
-VIEWS.p = v => {
-  const p = PPL[v.id], home = BLD[p.home], apt = p.apt >= 0 ? home.apts[p.apt] : null;
-  const mates = (apt ? apt.ppl : home.ppl).filter(id => id !== p.id).map(id => PPL[id]);
-  const family = mates.some(q => q.sur === p.sur), pet = apt ? apt.pet : home.pet;
-  return `<div class="hero"><span class="avatar" aria-hidden="true">${avatar(p)}</span><div class="hero-t"><p class="kind">${esc(ageStr(p.a))}</p><h2 class="title">${esc(p.f + ' ' + p.l)}</h2></div></div>
-  <dl class="facts one">${fact('Чем занят' + (p.g === 'f' ? 'а' : ''), occHtml(p))}${fact('Живёт', `<button class="lnk" data-go="b:${home.id}">${esc(home.addr)}${apt ? ', кв. ' + apt.n : ''}</button>`)}${fact('Сейчас', live('where:' + p.id))}</dl>
-  ${mates.length ? `<section class="sec"><h3>${family ? 'Семья' : 'Соседи по квартире'}</h3>${mates.map(q => personRow(q)).join('')}</section>` : ''}
-  ${pet ? `<p class="pet">Питомец: ${esc(pet)}</p>` : ''}`;
-};
+VIEWS.p = () => '<p class="desc">Карточки жителей отключены. В Virtual City основное внимание уделено объектам недвижимости.</p>';
 VIEWS.dir = v => `<div class="hero-t solo"><p class="kind">${STATS.bld} зданий · ${fmt(STATS.pop)} жителей</p><h2 class="title">Справочник Virtual City</h2></div>
-  <label class="search-l" for="dirQ">Поиск по зданиям, улицам и жителям</label>
-  <input id="dirQ" class="search" type="search" placeholder="Например, Пенка или Соколова" value="${esc(v.q || '')}" autocomplete="off" enterkeyhint="search">
+  <label class="search-l" for="dirQ">Поиск по зданиям и улицам</label>
+  <input id="dirQ" class="search" type="search" placeholder="Например, Пенка или Центральный проспект" value="${esc(v.q || '')}" autocomplete="off" enterkeyhint="search">
   <div class="cats" id="dirCats">${catChips(v.cat)}</div>
   <div id="dirList">${dirList(v)}</div>`;
 function catChips(cur) {
@@ -3691,11 +3715,7 @@ function dirList(v) {
   if (q) items = items.filter(b => norm(b.name + ' ' + b.addr + ' ' + (b.type || '')).includes(q));
   items.sort((a, b) => (CAT_ORDER[a.cat] ?? 99) - (CAT_ORDER[b.cat] ?? 99) || (a.cat === 'home' ? 0 : a.name.localeCompare(b.name, 'ru')) || a.addr.localeCompare(b.addr, 'ru', { numeric: true }));
   let h = items.map(dirRow).join('');
-  if (q.length >= 2) {
-    const ppl = PPL.filter(p => norm(p.f + ' ' + p.l).includes(q)).slice(0, 30);
-    if (ppl.length) h += '<h3 class="dir-h">Жители</h3>' + ppl.map(p => personRow(p)).join('');
-  }
-  return h || '<p class="empty">Ничего не нашлось. Попробуйте название кафе, улицу или имя жителя.</p>';
+  return h || '<p class="empty">Ничего не нашлось. Попробуйте название здания или улицы.</p>';
 }
 VIEWS.board = v => {
   v.tab = v.tab || 'd';
@@ -3712,12 +3732,12 @@ VIEWS.city = () => {
   const s = STATS;
   return `<div class="city-hero"><div class="citysign big" aria-hidden="true"><span class="cs-name">VIRTUAL CITY</span><span class="cs-sub">основан в 1898 году</span></div>
   <p class="desc">Virtual City — первый приморский город нашей общей виртуальной вселенной. Исследуйте районы, выбирайте квартиры и коммерческие объекты, совершайте тестовые покупки. Экономика пока демонстрационная.</p></div>
-  <div class="tiles">${tile('Жители', fmt(s.pop), `средний возраст ${s.avgAge} ${plural(s.avgAge, ['год', 'года', 'лет'])}`)}${tile('Квартиры', fmt(s.apts), `${s.vac} свободно`)}${tile('Частные дома', String(s.houses), `и ${s.homes} многоэтажек`)}${tile('Рабочие места', fmt(s.jobs), `${s.vacJobs} ${plural(s.vacJobs, ['вакансия', 'вакансии', 'вакансий'])}`)}${tile('Школьники', fmt(s.pupils), `ещё ${s.kids} в детском саду`)}${tile('Где поесть', String(s.cafes + s.rests), `${s.cafes} кафе и ${s.rests} ресторанов`)}</div>
+  <div class="tiles">${tile('Жители', fmt(s.pop), 'виртуальных жителей')}${tile('Квартиры', fmt(s.apts), `${s.vac} свободно`)}${tile('Частные дома', String(s.houses), `и ${s.homes} многоэтажек`)}${tile('Рабочие места', fmt(s.jobs), `${s.vacJobs} ${plural(s.vacJobs, ['вакансия', 'вакансии', 'вакансий'])}`)}${tile('Где поесть', String(s.cafes + s.rests), `${s.cafes} кафе и ${s.rests} ресторанов`)}</div>
   <button class="vc-buy" data-go="view:player">🎟 Мой профиль, баланс и собственность</button>
   <section class="sec"><h3>Энергия сейчас</h3><div data-live="energy">${energyHtml()}</div></section>
   <section class="sec"><h3>Сейчас в городе</h3><dl class="facts">${fact('Машин на дорогах', live('cars'))}${fact('Пешеходов', live('peds'))}${fact('Погода', live('wx'))}${fact('Футбол', live('match'))}</dl></section>
-  ${MAYOR >= 0 ? `<section class="sec"><h3>Мэр города</h3>${personRow(PPL[MAYOR], 'мэр Virtual City')}</section>` : ''}
-  <p class="note">Жители, адреса, рейсы и заведения выдуманы. Покупки в этой версии только тестовые и сохраняются локально; общего сервера игроков пока нет.</p>`;
+
+  <p class="note">Адреса, рейсы и заведения виртуальные. Покупки в этой версии только тестовые и сохраняются локально; общего сервера игроков пока нет.</p>`;
 };
 VIEWS.plane = v => {
   const p = PLANES.find(q => q.id === v.id);
